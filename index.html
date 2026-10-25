@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>確変タスク</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: one quiet monochrome column of goals → tasks; the only color lives in the full-screen jackpot overlay. */
+:root {
+  --bg: #fafafa; --surface: #ffffff; --fg: #111111; --muted: #6b6b6b; --line: #dedede; --soft: #f0f0f0;
+  --ui: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--ui); font-size: 15px; line-height: 1.6 }
+button, input { font: inherit; color: inherit }
+button { cursor: pointer }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px }
+
+.wrap { max-width: 760px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 calc(96px + env(safe-area-inset-bottom, 0px)) }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line) }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.topin { max-width: 760px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px; display: flex; align-items: center; gap: 12px }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: .04em; flex: 1; min-width: 0 }
+.pt { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; white-space: nowrap }
+.pt small { font-size: 12px; color: var(--muted); margin-left: 4px; font-family: var(--ui) }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 4px 10px; font-size: 13px; white-space: nowrap }
+
+h2.sec { font-size: 12px; letter-spacing: .14em; color: var(--muted); font-weight: 700; margin: 32px 0 10px }
+form.add { display: flex; gap: 8px }
+form.add input { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 10px 12px }
+form.add button, .btn { border: 1px solid var(--fg); background: var(--fg); color: var(--bg); border-radius: 8px; padding: 0 16px; font-weight: 700; white-space: nowrap }
+.btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); font-weight: 500 }
+
+.goals { display: flex; flex-direction: column; gap: 14px; margin-top: 14px }
+.goal { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px }
+.ghead { display: flex; align-items: flex-start; gap: 10px }
+.gtitle { flex: 1; min-width: 0; font-weight: 700; font-size: 17px; word-break: break-word }
+.gtitle .ex { font-size: 11px; font-weight: 500; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: 2px }
+.gmeta { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted) }
+.bar { height: 6px; background: var(--soft); border-radius: 99px; overflow: hidden; margin: 12px 0 4px }
+.bar i { display: block; height: 100%; background: var(--fg); border-radius: 99px; transition: width .5s ease }
+.done-stamp { font-size: 11px; font-weight: 700; letter-spacing: .12em; background: var(--fg); color: var(--bg); border-radius: 4px; padding: 1px 7px; margin-left: 6px; vertical-align: 2px }
+.tasks { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column }
+.task { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--soft) }
+.task:first-child { border-top: 0 }
+.chk { appearance: none; width: 22px; height: 22px; border: 1.5px solid var(--fg); border-radius: 6px; flex: none; display: grid; place-items: center; margin: 0; background: var(--surface) }
+.chk:checked { background: var(--fg) }
+.chk:checked::after { content: ""; width: 10px; height: 5px; border-left: 2px solid var(--bg); border-bottom: 2px solid var(--bg); transform: rotate(-45deg) translate(1px, -1px) }
+.tname { flex: 1; min-width: 0; word-break: break-word }
+.task.is-done .tname { color: var(--muted); text-decoration: line-through }
+.tier { font-family: var(--mono); font-size: 11px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; color: var(--muted) }
+.tier.t-BIG, .tier.t-SUPER, .tier.t-PREMIUM { color: var(--fg); border-color: var(--fg) }
+.tier.t-PREMIUM { background: var(--fg); color: var(--bg) }
+.x { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px }
+.x:hover { color: var(--fg); background: var(--soft) }
+.goal form.add { margin-top: 10px }
+.goal form.add input { padding: 8px 10px; font-size: 14px }
+.goal form.add button { padding: 0 12px; font-size: 14px }
+.empty { border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted) }
+
+/* サブタスク：番号つまみで並べ替え */
+.num { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--soft); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; position: relative }
+.num::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 8px; margin-left: -4px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; height: 2px; opacity: .5 }
+.task.dragging { background: var(--soft); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); position: relative; z-index: 2 }
+.task.dragging .num { background: var(--fg); color: var(--bg); cursor: grabbing }
+body.is-dragging { user-select: none; -webkit-user-select: none; cursor: grabbing }
+
+/* 下タブ */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px) }
+.tabin { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr }
+.tab { border: 0; background: none; padding: 8px 0 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted) }
+.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.tab[aria-current="page"] { color: var(--fg); font-weight: 700 }
+
+/* カレンダー */
+.calhead { display: flex; align-items: center; gap: 8px; margin: 22px 0 12px }
+.calhead h2 { margin: 0; font-size: 18px; font-weight: 700; flex: 1; min-width: 0 }
+.calhead .sum { font-family: var(--mono); font-size: 13px; color: var(--muted); white-space: nowrap }
+.navbtn { width: 34px; height: 34px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; font-size: 16px; line-height: 1 }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px }
+.wd { text-align: center; font-size: 11px; color: var(--muted); padding-bottom: 2px }
+.wd.sun { color: var(--fg) } 
+.day { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; min-height: 54px; padding: 4px 4px 5px; display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; text-align: left; min-width: 0 }
+.day .d { font-size: 12px; line-height: 1.2 }
+.day .p { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; overflow: hidden; line-height: 1.2 }
+.day.out { visibility: hidden }
+.day.has { border-color: var(--fg) }
+.day.today .d { font-weight: 700; text-decoration: underline; text-underline-offset: 3px }
+.day[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg) }
+.dayhead { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px }
+.dayhead h3 { margin: 0; font-size: 15px; font-weight: 700; flex: 1 }
+.dayhead .sum { font-family: var(--mono); font-size: 14px; font-weight: 600 }
+.dlist { display: flex; flex-direction: column; gap: 8px }
+.dtask { background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
+.dtask summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer }
+.dtask summary::-webkit-details-marker { display: none }
+.dtask summary::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--fg); border-bottom: 1.5px solid var(--fg); transform: rotate(-45deg); transition: transform .2s; flex: none }
+.dtask[open] summary::before { transform: rotate(45deg) }
+.dtask .tt { flex: 1; min-width: 0; font-weight: 700; word-break: break-word }
+.dtask .cnt { font-size: 12px; color: var(--muted); white-space: nowrap }
+.dtask .tp { font-family: var(--mono); font-size: 13px; font-weight: 600; white-space: nowrap }
+.dsubs { list-style: none; margin: 0; padding: 0 14px 10px 31px; display: flex; flex-direction: column }
+.dsubs li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--soft); font-size: 14px }
+.dsubs .sn { flex: 1; min-width: 0; word-break: break-word }
+.dsubs .tm { font-family: var(--mono); font-size: 11px; color: var(--muted) }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0 }
+table.rate { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums }
+table.rate th, table.rate td { text-align: left; padding: 5px 0; border-bottom: 1px solid var(--soft) }
+table.rate th { color: var(--muted); font-weight: 500; font-size: 12px }
+table.rate td.n { font-family: var(--mono); text-align: right }
+table.rate td.n, table.rate th.n { padding-left: 10px; white-space: nowrap }
+table.rate td:first-child { white-space: nowrap; padding-right: 8px }
+.panel { overflow-x: auto }
+table.rate td.v { text-align: right; width: 1%; padding-left: 8px }
+.view { border: 1px solid var(--fg); background: var(--surface); border-radius: 6px; padding: 1px 9px; font-size: 12px; white-space: nowrap }
+.view:hover { background: var(--fg); color: var(--bg) }
+table.rate th.n { text-align: right }
+
+/* ============ 演出オーバーレイ（ここだけ色あり、常に暗い舞台） ============ */
+#stage { position: fixed; inset: 0; z-index: 50; background: radial-gradient(circle at 50% 42%, #15151f, #050507 70%); color: #fff; display: grid; place-items: center; overflow: hidden; user-select: none; -webkit-user-select: none; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); transition: background .2s }
+#stage[hidden] { display: none !important }
+#fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 7 }
+.flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 7 }
+.machine { position: relative; z-index: 1; width: min(92vw, 520px); display: flex; flex-direction: column; align-items: center; gap: 26px; transition: opacity .15s }
+.orbbox { position: relative; width: min(62vw, 260px); aspect-ratio: 1; max-width: 100% }
+.aura { position: absolute; inset: -14%; border-radius: 50%; background: radial-gradient(circle, var(--glow) 0%, transparent 65%); opacity: .55; animation: breathe 1.6s ease-in-out infinite alternate }
+.ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--glow); opacity: 0; pointer-events: none }
+.ring.go { animation: converge .9s ease-in forwards }
+@keyframes converge { 0% { transform: scale(2.6); opacity: 0 } 30% { opacity: .9 } 100% { transform: scale(.95); opacity: 0 } }
+@keyframes breathe { to { transform: scale(1.12); opacity: .85 } }
+.orb { position: absolute; inset: 0; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 0 40px var(--glow), inset -12px -18px 40px rgba(0,0,0,.35); transition: filter .35s }
+.orb::after { content: ""; position: absolute; left: 18%; top: 12%; width: 34%; height: 22%; border-radius: 50%; background: radial-gradient(ellipse, rgba(255,255,255,.85), transparent 70%); transform: rotate(-25deg) }
+.kanji { position: relative; z-index: 1; font-family: var(--display); font-size: min(30vw, 124px); line-height: 1; color: var(--ink) }
+.lv0 { --glow: rgba(255,255,255,.55); --ink: #2a2a33 }
+.lv0 .orb { background: radial-gradient(circle at 34% 28%, #ffffff, #dcdee6 45%, #8e919e) }
+.lv1 { --glow: #2f7bff; --ink: #ffffff }
+.lv1 .orb { background: radial-gradient(circle at 34% 28%, #dcefff, #3a8dff 45%, #0a2a80) }
+.lv1 .kanji { text-shadow: 0 2px 0 #0a2a80 }
+.lv2 { --glow: #ff2a3d; --ink: #ffffff }
+.lv2 .orb { background: radial-gradient(circle at 34% 28%, #ffe0e0, #ff2a3d 45%, #640010) }
+.lv2 .kanji { text-shadow: 0 2px 0 #640010 }
+.lv3 { --glow: #ffc400; --ink: #5a3400 }
+.lv3 .orb { background: radial-gradient(circle at 34% 28%, #fffbe0, #ffcf2a 45%, #8a5a00) }
+.lv3 .kanji { text-shadow: 0 2px 0 #fff3b8 }
+.lv4 { --glow: #ffffff; --ink: #ffffff }
+.lv4 .orb { background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.9), transparent 40%), conic-gradient(from 0deg, #ff3b3b, #ffb300, #fff200, #2bd96b, #29a8ff, #a24bff, #ff3b3b); animation: hue 2s linear infinite }
+.lv4 .kanji { -webkit-text-stroke: 3px #1a1030; text-shadow: 0 0 24px #fff }
+.lv4 .aura { background: radial-gradient(circle, #fff 0%, #ff8ad8 30%, #6fd0ff 50%, transparent 68%); opacity: .8 }
+@keyframes hue { to { filter: hue-rotate(360deg) } }
+.orbbox.charge .orb { animation: vibrate .06s linear infinite; filter: brightness(1.35) }
+.lv4.charge .orb { animation: vibrate .06s linear infinite, hue 2s linear infinite }
+@keyframes vibrate { 0% { translate: -2px 1px } 50% { translate: 2px -1px } 100% { translate: -1px -2px } }
+.orbbox.pop { animation: pop .55s cubic-bezier(.2,1.6,.4,1) }
+@keyframes pop { 0% { transform: scale(1.45) } 100% { transform: scale(1) } }
+.orbbox.dim .orb { filter: brightness(.45) saturate(.6) }
+.orbbox.appear { animation: appear .6s cubic-bezier(.2,1.4,.4,1) }
+@keyframes appear { from { transform: scale(.2); opacity: 0 } }
+.kanji.stamp { animation: stamp .45s cubic-bezier(.2,1.5,.4,1) }
+@keyframes stamp { from { transform: scale(2.4); opacity: 0 } }
+.caption { min-height: 1.4em; font-family: var(--display); font-size: clamp(22px, 7vw, 40px); letter-spacing: .06em; text-align: center; text-shadow: 0 0 16px currentColor }
+.task-label { font-size: 13px; color: #9a9ab0; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.result { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; text-align: center; background: rgba(5,5,7,.86); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fadein .3s }
+.result[hidden] { display: none !important }
+.rbox { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 16px }
+.rtier { font-family: var(--mono); font-weight: 600; letter-spacing: .3em; font-size: 14px; color: #c9c9d6 }
+.rname { font-family: var(--display); font-size: clamp(32px, 10vw, 72px); line-height: 1.1; text-wrap: balance }
+.rpt { font-family: var(--display); font-size: clamp(44px, 15vw, 120px); line-height: 1; font-variant-numeric: tabular-nums }
+.rpt small { font-size: .38em; margin-left: .15em }
+.rsub { font-size: 14px; color: #c9c9d6 }
+.rclose { margin-top: 18px; font-size: 13px; border: 1px solid #44445a; border-radius: 99px; padding: 6px 18px; background: transparent; color: #ddd; transition: opacity .4s }
+.rclose.wait { opacity: 0; pointer-events: none }
+.r-N .rname, .r-N .rpt { color: #fff }
+.r-RARE .rname, .r-RARE .rpt { color: #5fb2ff; text-shadow: 0 0 20px #2f7bff }
+.r-BIG .rname, .r-BIG .rpt { color: #ff4a5a; text-shadow: 0 0 24px #ff2a3d }
+.r-SUPER .rname, .r-SUPER .rpt { color: #ffd43b; text-shadow: 0 0 30px #ffb300 }
+.r-PREMIUM .rname, .r-PREMIUM .rpt { background: linear-gradient(90deg, #ff3b3b, #ffb300, #fff200, #2bd96b, #29a8ff, #a24bff, #ff3b3b); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: slide 1.5s linear infinite; filter: drop-shadow(0 0 18px rgba(255,255,255,.5)) }
+@keyframes slide { to { background-position: 200% 0 } }
+@keyframes fadein { from { opacity: 0 } }
+.shake { animation: shake .45s linear }
+.shake-hard { animation: shake .3s linear infinite }
+@keyframes shake { 0%,100% { transform: none } 20% { transform: translate(-6px, 3px) } 40% { transform: translate(5px, -4px) } 60% { transform: translate(-4px, -2px) } 80% { transform: translate(4px, 4px) } }
+#stage.blackout { background: #000 }
+#tv { position: absolute; inset: 0; display: grid; place-items: center; transform-origin: 50% 50% }
+#lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6 }
+/* ブラウン管テレビが消える：縦につぶれて横線 → 点 → 消える */
+#tv.off { animation: crtoff .42s cubic-bezier(.5,0,.9,.4) forwards }
+@keyframes crtoff { 0% { transform: scale(1, 1); filter: brightness(1) } 45% { transform: scale(1.04, .006); filter: brightness(5) contrast(2) } 80% { transform: scale(.006, .006); filter: brightness(9) } 100% { transform: scale(0, 0); filter: brightness(10); opacity: 0 } }
+#tv.on { animation: crton .38s cubic-bezier(.1,.6,.4,1) }
+@keyframes crton { 0% { transform: scale(.006, .006); filter: brightness(9) } 40% { transform: scale(1.04, .006); filter: brightness(5) } 100% { transform: scale(1, 1); filter: brightness(1) } }
+.tvdot { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 18px 6px rgba(255,255,255,.8); opacity: 0; z-index: 8; pointer-events: none }
+.tvdot.glow { animation: afterglow .9s ease-out forwards }
+@keyframes afterglow { 0% { opacity: 1; transform: scale(1.2) } 100% { opacity: 0; transform: scale(.2) } }
+#tv.punch { animation: punch .28s ease-out }
+@keyframes punch { 0% { transform: scale(1.08) } 100% { transform: scale(1) } }
+.beat { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(circle, rgba(255,0,40,.28), transparent 60%); animation: beat .5s ease-out forwards }
+.beat.gold { background: radial-gradient(circle, rgba(255,200,0,.3), transparent 60%) }
+@keyframes beat { from { transform: scale(.6); opacity: 1 } to { transform: scale(1.4); opacity: 0 } }
+@media (prefers-reduced-motion: reduce) {
+  .shake, .shake-hard, #tv.off, #tv.on, #tv.punch, .aura, .orbbox.charge .orb, .lv4 .orb, .r-PREMIUM .rname, .r-PREMIUM .rpt { animation: none !important }
+}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px)}</style>
+</head>
+<body>
+
+<header class="top"><div class="topin">
+  <div class="brand">確変タスク</div>
+  <div class="pt"><span id="pt">0</span><small>PT</small></div>
+  <button class="iconbtn" id="snd" type="button" aria-pressed="true">音 ON</button>
+</div></header>
+
+<main class="wrap">
+ <div id="viewHome">
+  <h2 class="sec">タスク</h2>
+  <form class="add" id="goalForm">
+    <input id="goalInput" type="text" placeholder="新しいタスク（例：ポートフォリオを公開）" maxlength="80" autocomplete="off" aria-label="新しいタスク">
+    <button type="submit">タスクを追加</button>
+  </form>
+  <div class="goals" id="goals"></div>
+
+  <h2 class="sec">抽選</h2>
+  <section class="panel">
+    <table class="rate" aria-label="排出率">
+      <thead><tr><th>ランク</th><th class="n">PT</th><th class="n">確率</th><th class="n" id="viewHead"><span hidden>演出確認</span></th></tr></thead>
+      <tbody id="rateBody"></tbody>
+    </table>
+  </section>
+ </div>
+ <div id="viewCal" hidden>
+  <div class="calhead">
+    <button class="navbtn" id="calPrev" type="button" aria-label="前の月">‹</button>
+    <h2 id="calTitle"></h2>
+    <span class="sum" id="calSum"></span>
+    <button class="navbtn" id="calNext" type="button" aria-label="次の月">›</button>
+  </div>
+  <div class="cal" id="cal"></div>
+  <div class="dayhead"><h3 id="dayTitle"></h3><span class="sum" id="daySum"></span></div>
+  <div class="dlist" id="dayList"></div>
+ </div>
+</main>
+
+<nav class="tabbar" aria-label="画面切り替え"><div class="tabin">
+  <button class="tab" id="tabHome" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>ホーム</button>
+  <button class="tab" id="tabCal" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>カレンダー</button>
+</div></nav>
+
+<div id="stage" hidden aria-live="polite">
+  <div class="flash" id="flash"></div>
+  <div class="tvdot" id="tvdot"></div>
+  <div id="tv">
+  <canvas id="lines"></canvas>
+  <canvas id="fx"></canvas>
+  <div class="machine" id="machine">
+    <div class="orbbox lv0" id="orbbox"><div class="aura"></div><div class="ring" id="ring"></div><div class="orb"><span class="kanji" id="kanji">通</span></div></div>
+    <div class="caption" id="caption"></div>
+    <div class="task-label" id="taskLabel"></div>
+  </div>
+  <div class="result" id="result" hidden>
+    <div class="rbox">
+      <div class="rtier" id="rTier"></div>
+      <div class="rname" id="rName"></div>
+      <div class="rpt" id="rPt"></div>
+      <div class="rsub" id="rSub"></div>
+      <button class="rclose wait" id="rClose" type="button">タップで閉じる</button>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- 抽選テーブル ----------
+  // lv は球の段階（0 白 → 1 青 → 2 赤 → 3 金 → 4 虹）
+  const TIERS = {
+    N:       { name: "通常",       pt: 30,  rate: 0.60, lv: 0, label: "白い球" },
+    RARE:    { name: "レア",       pt: 50,  rate: 0.27, lv: 1, label: "青い球" },
+    BIG:     { name: "大当たり",   pt: 100, rate: 0.08, lv: 2, label: "赤い球" },
+    SUPER:   { name: "超大当たり", pt: 200, rate: 0.04, lv: 3, label: "金の球（暗転で昇格）" },
+    PREMIUM: { name: "PREMIUM",    pt: 300, rate: 0.01, lv: 4, label: "虹の球（暗転で昇格）" },
+  };
+  const ORDER = ["N", "RARE", "BIG", "SUPER", "PREMIUM"];
+  const LV = [
+    { kanji: "通", word: "",         color: "#ffffff" },
+    { kanji: "稀", word: "青!",      color: "#5fb2ff" },
+    { kanji: "熱", word: "赤!!",     color: "#ff4a5a" },
+    { kanji: "激", word: "金!!!",    color: "#ffd43b" },
+    { kanji: "神", word: "虹!!!!",   color: "#ffffff" },
+  ];
+  const tierName = (k) => TIERS[k]?.name || k;
+
+  function draw() {
+    let r = Math.random(), acc = 0;
+    for (const t of ORDER) { acc += TIERS[t].rate; if (r < acc) return t; }
+    return "N";
+  }
+  const chance = (p) => Math.random() < p;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  // ---------- 状態 ----------
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const LS = "kakuhen-task-v1";
+  const empty = () => ({ v: 2, points: 0, sound: true, history: [], stats: {}, goals: [] });
+  let state;
+  try { state = JSON.parse(localStorage.getItem(LS) || "null"); } catch (e) { state = null; }
+  if (!state || !Array.isArray(state.goals)) state = empty();
+  const fix = (s) => {
+    s.history = s.history || []; s.stats = s.stats || {}; delete s.kakuhen;
+    // 以前のサンプル（例）のタスクは、そこで得たPTごと取り除く
+    for (const g of s.goals.filter((g) => g.example)) for (const t of g.tasks) if (t.done && t.pt) s.points = Math.max(0, s.points - t.pt);
+    if (s.goals.some((g) => g.example)) { s.goals = s.goals.filter((g) => !g.example); s.history = s.history.filter((h) => h.task !== "載せる作品を3つ選ぶ"); }
+    return s;
+  };
+  fix(state);
+
+  let remote = null, saveTimer = null, saving = Promise.resolve();
+  function save() {
+    try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
+    if (!remote) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const body = { json: JSON.stringify(state), at: Date.now() };
+      saving = saving.then(() => remote.set(body)).catch(() => {});
+    }, 700);
+  }
+
+  (async () => {
+    try {
+      if (!window.claude?.use) return;
+      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      if (!db || !user) return;
+      const id = await user.id();
+      if (!id) return;
+      const ref = db.doc("data/users/" + id + "/state");
+      const snap = await ref.get();
+      remote = ref;
+      if (snap.exists) {
+        const s = JSON.parse(snap.data().json || "null");
+        if (s && Array.isArray(s.goals)) { state = fix(s); shownPt = state.points; render(); }
+      } else {
+        save();
+      }
+    } catch (e) { remote = null; }
+  })();
+
+  // ---------- 描画（白黒UI） ----------
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  let shownPt = state.points;
+
+  function render() {
+    $("pt").textContent = Math.round(shownPt).toLocaleString();
+    $("snd").textContent = state.sound ? "音 ON" : "音 OFF"; $("snd").setAttribute("aria-pressed", String(!!state.sound));
+
+    const box = $("goals"); box.textContent = "";
+    if (!state.goals.length) {
+      box.append(el("div", "empty", "まだタスクがありません。上の欄から最初のタスクを追加してください。"));
+    }
+    for (const g of state.goals) {
+      const done = g.tasks.filter((t) => t.done).length, total = g.tasks.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      const card = el("section", "goal");
+      const head = el("div", "ghead");
+      const title = el("div", "gtitle", g.title);
+      if (total && done === total) title.append(el("span", "done-stamp", "達成"));
+      const meta = el("div", "gmeta", `${done} / ${total} サブタスク完了 · ${pct}%`);
+      const del = el("button", "x", "×"); del.type = "button"; del.title = "タスクを削除"; del.setAttribute("aria-label", "タスク「" + g.title + "」を削除");
+      del.onclick = () => { if (del.dataset.armed) { state.goals = state.goals.filter((x) => x !== g); save(); render(); } else { del.dataset.armed = "1"; del.textContent = "削除する？"; del.style.fontSize = "12px"; setTimeout(() => { if (del.isConnected) { delete del.dataset.armed; del.textContent = "×"; del.style.fontSize = ""; } }, 2500); } };
+      head.append(title, del);
+      const bar = el("div", "bar"); const fill = el("i"); fill.style.width = pct + "%"; bar.append(fill);
+      card.append(head, bar, meta);
+
+      const ul = el("ul", "tasks");
+      g.tasks.forEach((t, i) => {
+        const li = el("li", "task" + (t.done ? " is-done" : "")); li.dataset.id = t.id;
+        const num = el("span", "num", String(i + 1)); num.title = "ドラッグで並べ替え"; num.setAttribute("aria-hidden", "true");
+        num.addEventListener("pointerdown", (e) => startDrag(e, g, li, ul));
+        li.append(num);
+        const cb = el("input", "chk"); cb.type = "checkbox"; cb.checked = !!t.done; cb.id = "t-" + t.id; cb.setAttribute("aria-label", t.title);
+        cb.onchange = () => toggleTask(g, t, cb.checked);
+        const nm = el("label", "tname", t.title); nm.htmlFor = cb.id;
+        li.append(cb, nm);
+        if (t.done && t.tier) li.append(el("span", "tier t-" + t.tier, tierName(t.tier) + " +" + t.pt));
+        const tx = el("button", "x", "×"); tx.type = "button"; tx.setAttribute("aria-label", "サブタスク「" + t.title + "」を削除");
+        tx.onclick = () => { g.tasks = g.tasks.filter((x) => x !== t); save(); render(); };
+        li.append(tx);
+        ul.append(li);
+      });
+      card.append(ul);
+
+      const f = el("form", "add"); const inp = el("input"); inp.type = "text"; inp.placeholder = "サブタスクを追加"; inp.maxLength = 80; inp.id = "add-" + g.id; inp.autocomplete = "off"; inp.setAttribute("aria-label", "「" + g.title + "」にサブタスクを追加");
+      const b = el("button", null, "追加"); b.type = "submit";
+      f.append(inp, b);
+      f.onsubmit = (e) => { e.preventDefault(); const v = inp.value.trim(); if (!v) return; g.tasks.push({ id: uid(), title: v, done: false }); save(); render(); document.getElementById("add-" + g.id)?.focus(); };
+      card.append(f);
+      box.append(card);
+    }
+
+    // 排出率
+    const rb = $("rateBody"); rb.textContent = "";
+    // 隠しコマンド：「あけましておめでとう」というタスクがあると演出確認ボタンが出る
+    const secret = state.goals.some((g) => g.title.replace(/\s/g, "") === "あけましておめでとう");
+    $("viewHead").hidden = !secret;
+    for (const t of ORDER) {
+      const T = TIERS[t];
+      const tr = el("tr"); tr.append(el("td", null, T.name), el("td", "n", "+" + T.pt), el("td", "n", Math.round(T.rate * 100) + "%"));
+      const vt = el("td", "v"), vb = el("button", "view", "見る"); vb.type = "button"; vb.setAttribute("aria-label", T.name + "の演出を見る（PTは増えません）");
+      vb.onclick = () => { if (!busy) play(t, T.name + " の演出確認", true); };
+      vt.append(vb); if (secret) tr.append(vt); rb.append(tr);
+    }
+    if (view === "cal") renderCal();
+  }
+
+  // ---------- 並べ替え（番号をつまんで上下にスライド） ----------
+  function startDrag(e, g, li, ul) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget; try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    li.classList.add("dragging"); document.body.classList.add("is-dragging");
+    const renumber = () => [...ul.children].forEach((n, i) => { n.querySelector(".num").textContent = i + 1; });
+    // つかんでいる行は動かさず、隣の行を入れ替える（行を動かすとポインタが外れるため）
+    const move = (ev) => {
+      const y = ev.clientY;
+      const prev = li.previousElementSibling, next = li.nextElementSibling;
+      if (prev) { const r = prev.getBoundingClientRect(); if (y < r.top + r.height / 2) { ul.insertBefore(prev, li.nextSibling); renumber(); return; } }
+      if (next) { const r = next.getBoundingClientRect(); if (y > r.top + r.height / 2) { ul.insertBefore(next, li); renumber(); } }
+    };
+    const end = () => {
+      handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", end); handle.removeEventListener("pointercancel", end);
+      li.classList.remove("dragging"); document.body.classList.remove("is-dragging");
+      const order = [...ul.children].map((n) => n.dataset.id);
+      const before = g.tasks.map((t) => t.id).join();
+      g.tasks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      if (g.tasks.map((t) => t.id).join() !== before) save();
+      render();
+    };
+    handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", end); handle.addEventListener("pointercancel", end);
+  }
+
+  // ---------- 画面切り替え ----------
+  let view = "home";
+  function setView(v) {
+    view = v;
+    $("viewHome").hidden = v !== "home"; $("viewCal").hidden = v !== "cal";
+    $("tabHome").toggleAttribute("aria-current", v === "home"); if (v === "home") $("tabHome").setAttribute("aria-current", "page");
+    $("tabCal").toggleAttribute("aria-current", v === "cal"); if (v === "cal") $("tabCal").setAttribute("aria-current", "page");
+    if (v === "cal") renderCal();
+    scrollTo(0, 0);
+  }
+  $("tabHome").onclick = () => setView("home");
+  $("tabCal").onclick = () => setView("cal");
+
+  // ---------- カレンダー ----------
+  const pad = (n) => String(n).padStart(2, "0");
+  const dayKey = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+  const now0 = new Date();
+  let calY = now0.getFullYear(), calM = now0.getMonth(), selKey = dayKey(now0);
+  const openDetails = new Set();
+
+  // 完了したサブタスクを日ごとにまとめる
+  function byDay() {
+    const map = {};
+    for (const g of state.goals) for (const t of g.tasks) {
+      if (!t.done || !t.doneAt) continue;
+      const k = dayKey(new Date(t.doneAt));
+      (map[k] = map[k] || { pt: 0, items: [] });
+      map[k].pt += t.pt || 0; map[k].items.push({ g, t });
+    }
+    return map;
+  }
+
+  function renderCal() {
+    const map = byDay(), todayKey = dayKey(new Date());
+    $("calTitle").textContent = calY + "年" + (calM + 1) + "月";
+    const grid = $("cal"); grid.textContent = "";
+    WD.forEach((w, i) => grid.append(el("div", "wd" + (i === 0 ? " sun" : ""), w)));
+    const first = new Date(calY, calM, 1), days = new Date(calY, calM + 1, 0).getDate();
+    for (let i = 0; i < first.getDay(); i++) grid.append(el("div", "day out"));
+    let monthPt = 0;
+    for (let d = 1; d <= days; d++) {
+      const k = calY + "-" + pad(calM + 1) + "-" + pad(d), info = map[k];
+      if (info) monthPt += info.pt;
+      const b = el("button", "day" + (info ? " has" : "") + (k === todayKey ? " today" : ""));
+      b.type = "button"; b.setAttribute("aria-pressed", String(k === selKey));
+      b.setAttribute("aria-label", (calM + 1) + "月" + d + "日" + (info ? " " + info.pt + "PT" : ""));
+      b.append(el("span", "d", String(d)), el("span", "p", info ? info.pt + "PT" : ""));
+      b.onclick = () => { selKey = k; renderCal(); };
+      grid.append(b);
+    }
+    $("calSum").textContent = "月合計 " + monthPt.toLocaleString() + "PT";
+
+    // 選んだ日の達成一覧
+    const [yy, mm, dd] = selKey.split("-").map(Number), sd = new Date(yy, mm - 1, dd);
+    $("dayTitle").textContent = mm + "月" + dd + "日（" + WD[sd.getDay()] + "）";
+    const info = map[selKey];
+    $("daySum").textContent = info ? "+" + info.pt.toLocaleString() + "PT" : "";
+    const list = $("dayList"); list.textContent = "";
+    if (!info) { list.append(el("div", "empty", "この日に達成したサブタスクはありません")); return; }
+    const groups = new Map();
+    for (const it of info.items) { if (!groups.has(it.g)) groups.set(it.g, []); groups.get(it.g).push(it.t); }
+    for (const [g, subs] of groups) {
+      subs.sort((a, b) => a.doneAt - b.doneAt);
+      const det = el("details", "dtask"); const key = selKey + "/" + g.id;
+      det.open = openDetails.has(key);
+      det.addEventListener("toggle", () => { det.open ? openDetails.add(key) : openDetails.delete(key); });
+      const sm = el("summary");
+      sm.append(el("span", "tt", g.title), el("span", "cnt", subs.length + "件"), el("span", "tp", "+" + subs.reduce((a, t) => a + (t.pt || 0), 0) + "PT"));
+      const ul = el("ul", "dsubs");
+      for (const t of subs) {
+        const li = el("li"); const dt = new Date(t.doneAt);
+        li.append(el("span", "tm", pad(dt.getHours()) + ":" + pad(dt.getMinutes())), el("span", "sn", t.title), el("span", "tier t-" + t.tier, tierName(t.tier) + " +" + t.pt));
+        ul.append(li);
+      }
+      det.append(sm, ul); list.append(det);
+    }
+  }
+  $("calPrev").onclick = () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); };
+  $("calNext").onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); };
+
+  function countUp(to) {
+    const from = shownPt, start = performance.now(), dur = Math.min(1600, 300 + Math.abs(to - from) * 4);
+    const step = (now) => { const p = Math.min(1, (now - start) / dur); shownPt = from + (to - from) * (1 - Math.pow(1 - p, 3)); $("pt").textContent = Math.round(shownPt).toLocaleString(); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+
+  async function toggleTask(g, t, checked) {
+    if (!checked) {
+      // 完了を取り消したら、そのタスクで得たPTも戻す
+      if (t.pt) { state.points = Math.max(0, state.points - t.pt); shownPt = state.points; }
+      t.done = false; delete t.tier; delete t.pt; save(); render(); return;
+    }
+    if (busy) { render(); return; }
+    const tier = draw(), pt = TIERS[tier].pt;
+    t.done = true; t.tier = tier; t.pt = pt; t.doneAt = Date.now();
+    state.points += pt;
+    state.stats[tier] = (state.stats[tier] || 0) + 1;
+    state.history.unshift({ tier, pt, task: t.title, at: Date.now() });
+    state.history = state.history.slice(0, 100);
+    save(); render();
+    await play(tier, t.title);
+    countUp(state.points);
+  }
+
+  $("goalForm").onsubmit = (e) => {
+    e.preventDefault(); const v = $("goalInput").value.trim(); if (!v) return;
+    state.goals.unshift({ id: uid(), title: v, tasks: [] }); $("goalInput").value = ""; save(); render();
+    document.getElementById("add-" + state.goals[0].id)?.focus();
+  };
+  $("snd").onclick = () => { state.sound = !state.sound; save(); render(); };
+
+  // ---------- 音（WebAudioで合成） ----------
+  let ac = null;
+  function audio() { if (!state.sound) return null; try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === "suspended") ac.resume(); return ac; } catch (e) { return null; } }
+  function tone(f, dur = 0.08, type = "square", vol = 0.06, when = 0, f2) {
+    const a = audio(); if (!a) return;
+    const t0 = a.currentTime + when, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  const SFX = {
+    appear: () => tone(660, 0.12, "triangle", 0.07, 0, 990),
+    charge: (lv) => { tone(160 + lv * 80, 0.9, "sawtooth", 0.045, 0, 700 + lv * 260); tone(240 + lv * 120, 0.9, "square", 0.02, 0.05, 1050 + lv * 390); },
+    up: (lv) => { const base = [392, 440, 523, 587, 659][lv] || 523; [1, 1.25, 1.5, 2].forEach((m, i) => tone(base * m, 0.2, "square", 0.06, i * 0.07)); },
+    dud: () => { tone(330, 0.35, "triangle", 0.08, 0, 110); tone(90, 0.2, "square", 0.04, 0.05) },
+    result: (lv) => lv === 0 ? tone(520, 0.12, "square", 0.06) : [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, "square", 0.06, i * 0.09)),
+    big: () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, "square", 0.06, i * 0.08)); [1047, 1319, 1568].forEach((f) => tone(f, 0.9, "sawtooth", 0.03, 0.5)); },
+    pachun: () => { tone(2400, 0.05, "square", 0.09, 0, 600); tone(140, 0.12, "sawtooth", 0.1, 0.01, 40); tone(9000, 0.03, "sawtooth", 0.03, 0); },
+    beat: () => { tone(58, 0.2, "sine", 0.3); tone(52, 0.2, "sine", 0.25, 0.16); },
+    boom: () => { tone(90, 0.8, "sawtooth", 0.12, 0, 30); tone(60, 1.0, "square", 0.08, 0.02, 25); tone(1800, 0.4, "sawtooth", 0.03, 0.02, 300); },
+    jackpot: () => { const m = [784, 784, 784, 1047, 988, 1047, 1319, 1568]; m.forEach((f, i) => { tone(f, 0.16, "square", 0.07, i * 0.12); tone(f / 2, 0.16, "triangle", 0.06, i * 0.12); }); [1047, 1319, 1568, 2093].forEach((f) => tone(f, 1.6, "sawtooth", 0.025, 1.0)); },
+  };
+
+  // ---------- 演出エンジン ----------
+  const stage = $("stage"), caption = $("caption"), flash = $("flash"), orbbox = $("orbbox"), kanji = $("kanji"), ring = $("ring");
+  let busy = false, curLv = 0;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // パーティクル
+  const cv = $("fx"), cx = cv.getContext("2d"); let parts = [], fxOn = false;
+  function sizeCanvas() { const dpr = Math.min(2, devicePixelRatio || 1); cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  function burst(n, palette, opts = {}) {
+    if (reduced) n = Math.min(n, 30);
+    const r = orbbox.getBoundingClientRect(), ox = r.left + r.width / 2, oy = r.top + r.height / 2;
+    for (let i = 0; i < n; i++) {
+      const fromTop = opts.rain;
+      parts.push({
+        x: fromTop ? Math.random() * innerWidth : ox + (Math.random() - .5) * 60,
+        y: fromTop ? -20 - Math.random() * innerHeight * .6 : oy,
+        vx: fromTop ? (Math.random() - .5) * 1.5 : (Math.random() - .5) * 16,
+        vy: fromTop ? 2 + Math.random() * 4 : -6 - Math.random() * 12,
+        s: 4 + Math.random() * 7, r: Math.random() * 6, vr: (Math.random() - .5) * .3,
+        c: pick(palette), coin: opts.coin && Math.random() < .6,
+      });
+    }
+    if (!fxOn) { fxOn = true; requestAnimationFrame(fxLoop); }
+  }
+  function fxLoop() {
+    cx.clearRect(0, 0, innerWidth, innerHeight);
+    for (const p of parts) {
+      p.vy += 0.25; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      cx.save(); cx.translate(p.x, p.y); cx.rotate(p.r); cx.fillStyle = p.c;
+      if (p.coin) { cx.beginPath(); cx.ellipse(0, 0, p.s, p.s * Math.abs(Math.cos(p.r * 2)) + 1, 0, 0, Math.PI * 2); cx.fill(); cx.strokeStyle = "#8a5a00"; cx.lineWidth = 1; cx.stroke(); }
+      else cx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2);
+      cx.restore();
+    }
+    parts = parts.filter((p) => p.y < innerHeight + 40);
+    if (parts.length && !stage.hidden) requestAnimationFrame(fxLoop); else { fxOn = false; cx.clearRect(0, 0, innerWidth, innerHeight); }
+  }
+  const PAL = [
+    ["#ffffff", "#dcdee6"],
+    ["#5fb2ff", "#ffffff", "#2f7bff"],
+    ["#ff2a3d", "#ffffff", "#ff8a95"],
+    ["#ffd43b", "#ffc400", "#fff1a8", "#e0a800"],
+    ["#ff3b3b", "#ffb300", "#fff200", "#2bd96b", "#29a8ff", "#a24bff", "#ffffff"],
+  ];
+
+  function doFlash(color, ms = 350, times = 1) {
+    let n = 0; const one = () => { flash.style.transition = "none"; flash.style.background = color; flash.style.opacity = reduced ? ".35" : ".9"; requestAnimationFrame(() => { flash.style.transition = `opacity ${ms}ms`; flash.style.opacity = "0"; }); if (++n < times) setTimeout(one, ms * 0.8); };
+    one();
+  }
+  function shake(hard) { if (reduced) return; stage.classList.remove("shake"); void stage.offsetWidth; stage.classList.add(hard ? "shake-hard" : "shake"); if (!hard) setTimeout(() => stage.classList.remove("shake"), 460); }
+
+  // 集中線：画面のふちから中心に向かう線を毎フレーム描き直す
+  const lc = $("lines"), lx = lc.getContext("2d"); let lines = null, linesRaf = 0, linesLast = 0;
+  function sizeLines() { const dpr = Math.min(2, devicePixelRatio || 1); lc.width = innerWidth * dpr; lc.height = innerHeight * dpr; lx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  function speedLines(opts) {
+    lines = opts; // { colors, n, inner } / null で停止
+    if (!opts) { cancelAnimationFrame(linesRaf); linesRaf = 0; lx.clearRect(0, 0, innerWidth, innerHeight); return; }
+    if (!linesRaf) linesRaf = requestAnimationFrame(drawLines);
+  }
+  function drawLines(now) {
+    if (!lines || stage.hidden) { linesRaf = 0; lx.clearRect(0, 0, innerWidth, innerHeight); return; }
+    linesRaf = requestAnimationFrame(drawLines);
+    if (now - linesLast < (reduced ? 400 : 45)) return;
+    linesLast = now;
+    const w = innerWidth, h = innerHeight, cxp = w / 2, cyp = h * 0.45, far = Math.hypot(w, h);
+    const base = Math.min(w, h) * (lines.inner || 0.36);
+    lx.clearRect(0, 0, w, h);
+    for (let i = 0; i < (lines.n || 110); i++) {
+      const a = Math.random() * Math.PI * 2, spread = 0.004 + Math.random() * 0.016;
+      const r1 = base * (0.85 + Math.random() * 0.6);
+      lx.globalAlpha = 0.45 + Math.random() * 0.55;
+      lx.fillStyle = pick(lines.colors);
+      lx.beginPath();
+      lx.moveTo(cxp + Math.cos(a - spread) * far, cyp + Math.sin(a - spread) * far);
+      lx.lineTo(cxp + Math.cos(a + spread) * far, cyp + Math.sin(a + spread) * far);
+      lx.lineTo(cxp + Math.cos(a) * r1, cyp + Math.sin(a) * r1);
+      lx.closePath(); lx.fill();
+    }
+    lx.globalAlpha = 1;
+  }
+  const tv = $("tv"), tvdot = $("tvdot");
+  function punch() { if (!reduced) retrigger(tv, "punch"); }
+  function setCaption(t, color = "#fff") { caption.textContent = t; caption.style.color = color; }
+  function retrigger(node, cls) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+
+  function setLevel(lv) {
+    curLv = lv;
+    orbbox.className = "orbbox lv" + lv;
+    kanji.textContent = LV[lv].kanji;
+    retrigger(kanji, "stamp"); retrigger(orbbox, "pop");
+  }
+
+  // 球にエネルギーをためる。成功すれば1段階アップ、失敗なら不発。
+  async function charge(success, holdMs = 900) {
+    orbbox.classList.add("charge"); retrigger(ring, "go"); SFX.charge(curLv);
+    await sleep(holdMs);
+    orbbox.classList.remove("charge"); ring.classList.remove("go");
+    if (success) {
+      const lv = curLv + 1;
+      doFlash(LV[lv].color, 380); setLevel(lv); SFX.up(lv); burst(18 + lv * 14, PAL[lv], { coin: lv >= 3 });
+      setCaption(LV[lv].word, LV[lv].color);
+      await sleep(800);
+    } else {
+      orbbox.classList.add("dim"); SFX.dud(); setCaption("……", "#77778a");
+      await sleep(650);
+      orbbox.classList.remove("dim"); setCaption("");
+      await sleep(250);
+    }
+  }
+
+  // 結果画面。fake のときは閉じられないまま、少しして暗転へつながる。
+  let resolveClose = null, rainIv = 0;
+  function showResult(tier, { preview = false, fake = false } = {}) {
+    const T = TIERS[tier], res = $("result"), btn = $("rClose");
+    res.className = "result r-" + tier; res.hidden = false;
+    $("rTier").textContent = preview ? "演出確認（PTは増えません）" : "RESULT";
+    $("rName").textContent = T.name;
+    $("rPt").textContent = "+" + T.pt.toLocaleString(); $("rPt").append(el("small", null, "PT"));
+    $("rSub").textContent = tier === "N" ? "コツコツ積み上げよう" : tier === "PREMIUM" ? "おめでとう！最高ランクです" : "ナイス！";
+    btn.classList.add("wait"); resolveClose = null;
+    SFX.result(T.lv);
+    if (fake) return sleep(2300);
+    return new Promise((r) => setTimeout(() => { btn.classList.remove("wait"); resolveClose = r; btn.focus(); }, 1800));
+  }
+
+  // 結果が出た…と思わせて、テレビが消えるように「ぱちゅん」→ 暗闇 → 1ランク上で復活
+  async function blackout(toLv, premium) {
+    speedLines(null);
+    SFX.pachun();
+    tv.classList.remove("on", "punch"); tv.classList.add("off");
+    await sleep(400);
+    tv.style.visibility = "hidden"; retrigger(tvdot, "glow");
+    stage.classList.add("blackout"); clearInterval(rainIv); parts = [];
+    $("result").hidden = true; setCaption("");
+    await sleep(premium ? 1500 : 1100);
+    for (let i = 0; i < (premium ? 3 : 2); i++) {
+      SFX.beat(); const b = el("div", "beat" + (toLv >= 3 ? " gold" : "")); stage.append(b); setTimeout(() => b.remove(), 520);
+      await sleep(premium ? 600 : 700);
+    }
+    await sleep(350);
+    // 復活：テレビがつく
+    orbbox.classList.remove("dim"); setLevel(toLv);
+    stage.classList.remove("blackout"); tv.style.visibility = ""; tv.classList.remove("off"); retrigger(tv, "on");
+    SFX.boom(); doFlash("#ffffff", 700, premium ? 4 : 2);
+    const colors = premium ? PAL[4] : ["#ffffff", "#ffd43b", "#fff1a8"];
+    speedLines({ colors, n: premium ? 170 : 130, inner: 0.34 });
+    await sleep(380);
+    shake(true);
+    if (premium) {
+      SFX.jackpot();
+      burst(240, PAL[4].concat(PAL[3]), { coin: true }); burst(170, PAL[3], { rain: true, coin: true });
+      setCaption("神!!!!!", "#ffffff");
+      rainIv = setInterval(() => { burst(28, PAL[4].concat(PAL[3]), { rain: true, coin: true }); punch(); }, 650);
+    } else {
+      SFX.big();
+      burst(170, PAL[3], { coin: true }); burst(100, PAL[3], { rain: true, coin: true });
+      setCaption("金!!! 超大当たり", "#ffd43b");
+      rainIv = setInterval(() => { burst(18, PAL[3], { rain: true, coin: true }); punch(); }, 750);
+    }
+    // ドン、ドン、と画面ごと脈打たせる
+    for (let i = 0; i < 4; i++) { await sleep(premium ? 420 : 480); punch(); retrigger(orbbox, "pop"); doFlash(premium ? pick(PAL[4]) : "#ffd43b", 260); SFX.up(toLv); }
+    stage.classList.remove("shake-hard");
+    await sleep(500);
+  }
+
+  async function sequence(tier, preview) {
+    // 白い球が出現
+    await sleep(300);
+    orbbox.classList.add("appear"); SFX.appear(); await sleep(700); orbbox.classList.remove("appear");
+
+    if (tier === "N") {
+      await charge(false);
+      if (chance(0.35)) await charge(false, 1100);
+      return showResult("N", { preview });
+    }
+    if (tier === "RARE") {
+      if (chance(0.4)) await charge(false);
+      await charge(true);
+      return showResult("RARE", { preview });
+    }
+    // ここから先は 大当たり（赤）までは共通
+    await charge(true);
+    if (chance(0.45)) await charge(false, 1100);
+    await charge(true, 1200);
+    SFX.big(); burst(70, PAL[2]);
+    await sleep(500);
+
+    if (tier === "BIG") return showResult("BIG", { preview });
+
+    // 超大当たり以上：大当たりの結果を見せてから暗転
+    await showResult("BIG", { preview, fake: true });
+    if (tier === "SUPER") { await blackout(3, false); return showResult("SUPER", { preview }); }
+
+    // PREMIUM：金に昇格 →「超大当たり」を見せて → もう一度暗転して虹へ
+    await blackout(3, false);
+    await showResult("SUPER", { preview, fake: true });
+    await blackout(4, true);
+    return showResult("PREMIUM", { preview });
+  }
+
+  async function play(tier, taskName, preview = false) {
+    busy = true; parts = []; clearInterval(rainIv);
+    sizeCanvas(); sizeLines(); speedLines(null); stage.hidden = false; stage.className = "";
+    tv.className = ""; tv.style.visibility = "";
+    $("result").hidden = true;
+    $("taskLabel").textContent = preview ? taskName : "完了：" + taskName;
+    setCaption(""); curLv = 0; orbbox.className = "orbbox lv0"; kanji.textContent = LV[0].kanji;
+
+    try { await sequence(tier, preview); } catch (e) { console.error(e); } // 結果画面を閉じるまで待つ
+    clearInterval(rainIv); speedLines(null); stage.hidden = true; stage.className = ""; parts = [];
+    busy = false;
+  }
+
+  stage.addEventListener("click", () => {
+    if (!$("result").hidden && resolveClose) { const r = resolveClose; resolveClose = null; r(); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (stage.hidden) return;
+    if (e.key === "Escape" || e.key === "Enter" || e.key === " ") { e.preventDefault(); stage.click(); }
+  });
+  addEventListener("resize", () => { if (!stage.hidden) { sizeCanvas(); sizeLines(); } });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -34,6 +34,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .brand img { height: 32px; width: auto; max-width: 100%; display: inline-block; border-radius: 8px }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand img { background: #fff; padding: 3px 8px } }
 :root[data-theme="dark"] .brand img { background: #fff; padding: 3px 8px }
+body.typing .wrap { padding-bottom: 80vh }
 .editable { cursor: text; border-radius: 4px }
 .editable:hover { background: var(--soft) }
 .rename { font: inherit; font-weight: inherit; width: 100%; min-width: 0; flex: 1; border: 1px solid var(--fg); border-radius: 6px; padding: 2px 6px; background: var(--surface); color: var(--fg) }
@@ -382,6 +383,17 @@ table.rate th.n { text-align: right }
     node.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); start(); } });
   }
 
+  // サブタスク入力欄を押したら、その欄が画面の上（ヘッダーのすぐ下）に来るようにスクロール
+  function scrollInputToTop(inp) {
+    document.body.classList.add("typing"); // 下に余白を足して、一番下の欄でも上まで上げられるようにする
+    const go = () => {
+      const header = document.querySelector("header.top").getBoundingClientRect().bottom;
+      const y = inp.getBoundingClientRect().top + scrollY - header - 12;
+      scrollTo({ top: Math.max(0, y), behavior: reduced ? "auto" : "smooth" });
+    };
+    go(); setTimeout(go, 350); // キーボードが出きったあとにもう一度合わせる
+  }
+
   function render() {
     $("pt").textContent = Math.round(shownPt).toLocaleString();
     $("snd").textContent = state.sound ? "音 ON" : "音 OFF"; $("snd").setAttribute("aria-pressed", String(!!state.sound));
@@ -431,7 +443,14 @@ table.rate th.n { text-align: right }
       const f = el("form", "add"); const inp = el("input"); inp.type = "text"; inp.placeholder = "サブタスクを追加"; inp.maxLength = 80; inp.id = "add-" + g.id; inp.autocomplete = "off"; inp.setAttribute("aria-label", "「" + g.title + "」にサブタスクを追加");
       const b = el("button", null, "追加"); b.type = "submit";
       f.append(inp, b);
-      f.onsubmit = (e) => { e.preventDefault(); const v = inp.value.trim(); if (!v) return; g.tasks.push({ id: uid(), title: v, done: false }); save(); render(); document.getElementById("add-" + g.id)?.focus(); };
+      f.onsubmit = (e) => {
+        e.preventDefault(); const v = inp.value.trim(); if (!v) return;
+        g.tasks.push({ id: uid(), title: v, done: false });
+        inp.blur(); document.body.classList.remove("typing"); // 追加したらキーボードを閉じる
+        save(); render();
+      };
+      inp.addEventListener("focus", () => scrollInputToTop(inp));
+      inp.addEventListener("blur", () => setTimeout(() => { if (!document.activeElement?.matches?.("form.add input")) document.body.classList.remove("typing"); }, 100));
       card.append(f);
       box.append(card);
     }

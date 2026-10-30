@@ -10,14 +10,14 @@
 <style>
 /* Layout: one quiet monochrome column of goals → tasks; the only color lives in the full-screen jackpot overlay. */
 :root {
-  --bg: #fafafa; --surface: #ffffff; --fg: #111111; --muted: #6b6b6b; --line: #dedede; --soft: #f0f0f0;
+  --bg: #fafafa; --surface: #ffffff; --fg: #111111; --muted: #6b6b6b; --line: #dedede; --soft: #f0f0f0; --good: #1a8f4c; --bad: #d92d20;
   --ui: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   --display: "Dela Gothic One", "Hiragino Sans", "Noto Sans JP", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; color-scheme: dark } }
-:root[data-theme="dark"] { --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; color-scheme: dark }
+  --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; --good: #3ccf7f; --bad: #ff5a4f; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #0e0e0e; --surface: #161616; --fg: #ededed; --muted: #9a9a9a; --line: #2c2c2c; --soft: #1f1f1f; --good: #3ccf7f; --bad: #ff5a4f; color-scheme: dark }
 
 * { box-sizing: border-box }
 body { background: var(--bg); color: var(--fg); font-family: var(--ui); font-size: 15px; line-height: 1.6 }
@@ -78,7 +78,8 @@ form.add button, .btn { border: 1px solid var(--fg); background: var(--fg); colo
 .empty { border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted) }
 
 /* サブタスク：番号つまみで並べ替え */
-.num { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--soft); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; position: relative }
+.num { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--muted); background: var(--soft); cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; position: relative; transition: transform .15s, background .15s }
+.num.pressing { transform: scale(1.18); background: var(--line) }
 .num::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 8px; margin-left: -4px; border-top: 1px solid currentColor; border-bottom: 1px solid currentColor; height: 2px; opacity: .5 }
 .task.dragging { background: var(--soft); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); position: relative; z-index: 2 }
 .task.dragging .num { background: var(--fg); color: var(--bg); cursor: grabbing }
@@ -86,7 +87,47 @@ body.is-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
 
 /* 下タブ */
 .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px) }
-.tabin { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr }
+.tabin { max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr) }
+.donehint { font-size: 12px; color: var(--muted); text-align: center; margin: 4px 0 0 }
+.goal.is-complete { opacity: .7 }
+
+/* 習慣 */
+.streak { text-align: center; margin: 26px 0 18px }
+.streak .big { font-family: var(--display); font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums }
+.streak .big small { font-family: var(--ui); font-size: 16px; font-weight: 700; margin-left: 4px }
+.streak .lbl { font-size: 12px; color: var(--muted); margin-top: 6px }
+.startbtn { width: 100%; border: 2px solid var(--fg); background: var(--fg); color: var(--bg); border-radius: 16px; padding: 22px 0; font-family: var(--display); font-size: 30px; letter-spacing: .08em; transition: transform .08s }
+.startbtn:active:not(:disabled) { transform: scale(.98) }
+.startbtn:disabled { background: transparent; color: var(--muted); border-color: var(--line); cursor: default }
+.hstatus { text-align: center; font-size: 13px; color: var(--muted); margin: 10px 0 0; min-height: 1.6em; font-variant-numeric: tabular-nums }
+.hstatus b { color: var(--fg) }
+.hstatus .ok { color: var(--good); font-weight: 700 }
+.hstatus .ng { color: var(--bad); font-weight: 700 }
+.linkbtn { border: 0; background: none; padding: 0; text-decoration: underline; text-underline-offset: 3px; font-size: 13px; color: var(--fg) }
+.chartcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 10px; margin-top: 26px; position: relative }
+.charthead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px }
+.charthead h3 { margin: 0; font-size: 14px; flex: 1; min-width: 0 }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
+.seg button { border: 0; background: none; padding: 4px 12px; font-size: 12px; color: var(--muted) }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg) }
+.chartsum { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-variant-numeric: tabular-nums }
+.chartsum b { color: var(--fg) }
+#chart { display: block; width: 100%; height: 220px; touch-action: pan-y }
+#chart text { font-family: var(--mono); font-size: 10px; fill: var(--muted) }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -120%); font-variant-numeric: tabular-nums }
+.tip[hidden] { display: none }
+.chartempty { position: absolute; left: 0; right: 0; top: 50%; text-align: center; font-size: 13px; color: var(--muted); pointer-events: none }
+
+/* 設定 */
+.setrow { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--soft) }
+.setrow:last-child { border-bottom: 0 }
+.setrow .sl { flex: 1; min-width: 0 }
+.setrow .sl b { display: block; font-size: 15px }
+.setrow .sl span { font-size: 12px; color: var(--muted) }
+.setrow input[type="time"] { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 10px; font-family: var(--mono); font-size: 16px }
+
 .tab { border: 0; background: none; padding: 8px 0 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted) }
 .tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
 .tab[aria-current="page"] { color: var(--fg); font-weight: 700 }
@@ -199,7 +240,11 @@ table.rate th.n { text-align: right }
 .shake { animation: shake .45s linear }
 .shake-hard { animation: shake .3s linear infinite }
 @keyframes shake { 0%,100% { transform: none } 20% { transform: translate(-6px, 3px) } 40% { transform: translate(5px, -4px) } 60% { transform: translate(-4px, -2px) } 80% { transform: translate(4px, 4px) } }
+#stage.kakuhen { background: radial-gradient(circle at 50% 42%, #6a0014, #140005 72%) }
+#stage.kakuhen::before { content: ""; position: absolute; inset: -60%; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,70,70,.22) 0deg 7deg, transparent 7deg 20deg); animation: kkspin 9s linear infinite; pointer-events: none }
+@keyframes kkspin { to { transform: rotate(360deg) } }
 #stage.blackout { background: #000 }
+#stage.blackout::before { display: none }
 #tv { position: absolute; inset: 0; display: grid; place-items: center; transform-origin: 50% 50% }
 #lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6 }
 /* ブラウン管テレビが消える：縦につぶれて横線 → 点 → 消える */
@@ -216,7 +261,7 @@ table.rate th.n { text-align: right }
 .beat.gold { background: radial-gradient(circle, rgba(255,200,0,.3), transparent 60%) }
 @keyframes beat { from { transform: scale(.6); opacity: 1 } to { transform: scale(1.4); opacity: 0 } }
 @media (prefers-reduced-motion: reduce) {
-  .shake, .shake-hard, #tv.off, #tv.on, #tv.punch, .aura, .orbbox.charge .orb, .lv4 .orb, .r-PREMIUM .rname, .r-PREMIUM .rpt { animation: none !important }
+  #stage.kakuhen::before, .shake, .shake-hard, #tv.off, #tv.on, #tv.punch, .aura, .orbbox.charge .orb, .lv4 .orb, .r-PREMIUM .rname, .r-PREMIUM .rpt { animation: none !important }
 }
 </style>
 <style>body{margin:0}[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px)}</style>
@@ -241,7 +286,7 @@ table.rate th.n { text-align: right }
   <h2 class="sec">抽選</h2>
   <section class="panel">
     <table class="rate" aria-label="排出率">
-      <thead><tr><th>ランク</th><th class="n">PT</th><th class="n">確率</th><th class="n" id="viewHead"><span hidden>演出確認</span></th></tr></thead>
+      <thead><tr><th>ランク</th><th class="n">PT</th><th class="n">確率</th><th class="n">確変時</th><th class="n" id="viewHead"><span hidden>演出確認</span></th></tr></thead>
       <tbody id="rateBody"></tbody>
     </table>
   </section>
@@ -257,11 +302,35 @@ table.rate th.n { text-align: right }
   <div class="dayhead"><h3 id="dayTitle"></h3><span class="sum" id="daySum"></span></div>
   <div class="dlist" id="dayList"></div>
  </div>
+ <div id="viewHabit" hidden>
+  <div class="streak"><div class="big"><span id="streakNum">0</span><small>日連続</small></div><div class="lbl">設定した時間から1分以内に「始めた!」を押せた日数</div></div>
+  <button class="startbtn" id="startBtn" type="button">始めた!</button>
+  <p class="hstatus" id="hStatus"></p>
+  <section class="chartcard">
+    <div class="charthead"><h3>始めるまでの時間</h3>
+      <div class="seg" role="group" aria-label="期間"><button type="button" data-range="7" aria-pressed="true">1週間</button><button type="button" data-range="30" aria-pressed="false">1か月</button><button type="button" data-range="365" aria-pressed="false">1年</button></div>
+    </div>
+    <div class="chartsum" id="chartSum"></div>
+    <svg id="chart" role="img" aria-label="設定時間から始めた!を押すまでの時間の推移"></svg>
+    <div class="chartempty" id="chartEmpty" hidden>まだ記録がありません</div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="legend"><span><i style="background:var(--good)"></i>1分以内</span><span><i style="background:var(--bad)"></i>1分を超えた</span></div>
+  </section>
+ </div>
+ <div id="viewSet" hidden>
+  <h2 class="sec">設定</h2>
+  <section class="panel">
+    <div class="setrow"><div class="sl"><b>習慣の開始時間</b><span>この時間から1分以内に「始めた!」を押すとガチャが回せます</span></div><input type="time" id="setTime" aria-label="習慣の開始時間"></div>
+    <div class="setrow"><div class="sl"><b>効果音</b><span>ガチャの音を鳴らします</span></div><button class="iconbtn" id="setSnd" type="button" aria-pressed="true">ON</button></div>
+  </section>
+ </div>
 </main>
 
 <nav class="tabbar" aria-label="画面切り替え"><div class="tabin">
   <button class="tab" id="tabHome" type="button" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>ホーム</button>
   <button class="tab" id="tabCal" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>カレンダー</button>
+  <button class="tab" id="tabHabit" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2.5h6"/></svg>習慣</button>
+  <button class="tab" id="tabSet" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>設定</button>
 </div></nav>
 
 <div id="stage" hidden aria-live="polite">
@@ -308,10 +377,12 @@ table.rate th.n { text-align: right }
   ];
   const tierName = (k) => TIERS[k]?.name || k;
 
-  function draw() {
+  // 確変中は「通常」が出ず、残りのランクの比率を保ったまま、通常の60%ぶんがそこに上乗せされる
+  const kkRate = (t) => t === "N" ? 0 : TIERS[t].rate / (1 - TIERS.N.rate);
+  function draw(kakuhen = false) {
     let r = Math.random(), acc = 0;
-    for (const t of ORDER) { acc += TIERS[t].rate; if (r < acc) return t; }
-    return "N";
+    for (const t of ORDER) { acc += kakuhen ? kkRate(t) : TIERS[t].rate; if (r < acc) return t; }
+    return kakuhen ? "RARE" : "N";
   }
   const chance = (p) => Math.random() < p;
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -319,12 +390,13 @@ table.rate th.n { text-align: right }
   // ---------- 状態 ----------
   const uid = () => Math.random().toString(36).slice(2, 10);
   const LS = "kakuhen-task-v1";
-  const empty = () => ({ v: 2, points: 0, sound: true, history: [], stats: {}, goals: [] });
+  const empty = () => ({ v: 2, points: 0, sound: true, history: [], stats: {}, goals: [], habit: { time: "", log: {} } });
   let state;
   try { state = JSON.parse(localStorage.getItem(LS) || "null"); } catch (e) { state = null; }
   if (!state || !Array.isArray(state.goals)) state = empty();
   const fix = (s) => {
     s.history = s.history || []; s.stats = s.stats || {}; delete s.kakuhen;
+    s.habit = s.habit || { time: "", log: {} }; s.habit.log = s.habit.log || {};
     // 以前のサンプル（例）のタスクは、そこで得たPTごと取り除く
     for (const g of s.goals.filter((g) => g.example)) for (const t of g.tasks) if (t.done && t.pt) s.points = Math.max(0, s.points - t.pt);
     if (s.goals.some((g) => g.example)) { s.goals = s.goals.filter((g) => !g.example); s.history = s.history.filter((h) => h.task !== "載せる作品を3つ選ぶ"); }
@@ -367,6 +439,12 @@ table.rate th.n { text-align: right }
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   let shownPt = state.points;
 
+  // タスクの全サブタスクが終わっていれば、最後に終えた時刻を返す（未達成なら null）
+  function completedAt(g) {
+    if (!g.tasks.length || !g.tasks.every((t) => t.done)) return null;
+    return Math.max(0, ...g.tasks.map((t) => t.doneAt || 0));
+  }
+
   // 文字をタップすると名前を変更できる
   function editable(node, get, set) {
     node.classList.add("editable"); node.tabIndex = 0; node.title = "タップで名前を変更";
@@ -383,29 +461,37 @@ table.rate th.n { text-align: right }
     node.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); start(); } });
   }
 
-  // サブタスク入力欄を押したら、その欄が画面の上（ヘッダーのすぐ下）に来るようにスクロール
+  // サブタスク入力欄を押したら、その欄が画面の上のほう（ヘッダーより少し下）に来るようにスクロール
   function scrollInputToTop(inp) {
     document.body.classList.add("typing"); // 下に余白を足して、一番下の欄でも上まで上げられるようにする
     const go = () => {
       const header = document.querySelector("header.top").getBoundingClientRect().bottom;
-      const y = inp.getBoundingClientRect().top + scrollY - header - 12;
+      const vh = window.visualViewport ? visualViewport.height : innerHeight;
+      const gap = Math.max(56, Math.round((vh - header) * 0.22)); // ヘッダーから少し下げた位置に置く
+      const y = inp.getBoundingClientRect().top + scrollY - header - gap;
       scrollTo({ top: Math.max(0, y), behavior: reduced ? "auto" : "smooth" });
     };
     go(); setTimeout(go, 350); // キーボードが出きったあとにもう一度合わせる
   }
+
+  const fmtPct = (v) => (Number.isInteger(Math.round(v * 10) / 10) ? Math.round(v) : (Math.round(v * 10) / 10).toFixed(1)) + "%";
 
   function render() {
     $("pt").textContent = Math.round(shownPt).toLocaleString();
     $("snd").textContent = state.sound ? "音 ON" : "音 OFF"; $("snd").setAttribute("aria-pressed", String(!!state.sound));
 
     const box = $("goals"); box.textContent = "";
-    if (!state.goals.length) {
-      box.append(el("div", "empty", "まだタスクがありません。上の欄から最初のタスクを追加してください。"));
+    // 達成したタスクは下へ。達成した日の翌日になったらホームから消える（カレンダーには残る）
+    const today = dayKey(new Date());
+    const shown = state.goals.filter((g) => { const c = completedAt(g); return c === null || dayKey(new Date(c)) >= today; });
+    shown.sort((a, b) => (completedAt(a) !== null) - (completedAt(b) !== null));
+    if (!shown.length) {
+      box.append(el("div", "empty", state.goals.length ? "今あるタスクはすべて達成しました。達成したタスクはカレンダーで見られます。" : "まだタスクがありません。上の欄から最初のタスクを追加してください。"));
     }
-    for (const g of state.goals) {
+    for (const g of shown) {
       const done = g.tasks.filter((t) => t.done).length, total = g.tasks.length;
       const pct = total ? Math.round((done / total) * 100) : 0;
-      const card = el("section", "goal");
+      const card = el("section", "goal" + (completedAt(g) !== null ? " is-complete" : ""));
       const head = el("div", "ghead");
       const title = el("div", "gtitle"); const tn = el("span", null, g.title);
       editable(tn, () => g.title, (v) => { g.title = v; });
@@ -424,7 +510,8 @@ table.rate th.n { text-align: right }
       g.tasks.forEach((t, i) => {
         const li = el("li", "task" + (t.done ? " is-done" : "")); li.dataset.id = t.id;
         const num = el("span", "num", String(i + 1)); num.title = "ドラッグで並べ替え"; num.setAttribute("aria-hidden", "true");
-        num.addEventListener("pointerdown", (e) => startDrag(e, g, li, ul));
+        num.addEventListener("pointerdown", (e) => longPress(e, g, li, ul));
+        num.addEventListener("contextmenu", (e) => e.preventDefault());
         li.append(num);
         const cb = el("input", "chk"); cb.type = "checkbox"; cb.checked = !!t.done; cb.id = "t-" + t.id; cb.setAttribute("aria-label", t.title + "を完了してガチャを引く");
         // ガチャを引いたらチェックは外せない
@@ -462,30 +549,59 @@ table.rate th.n { text-align: right }
     $("viewHead").hidden = !secret;
     for (const t of ORDER) {
       const T = TIERS[t];
-      const tr = el("tr"); tr.append(el("td", null, T.name), el("td", "n", "+" + T.pt), el("td", "n", Math.round(T.rate * 100) + "%"));
+      const tr = el("tr"); tr.append(el("td", null, T.name), el("td", "n", "+" + T.pt), el("td", "n", Math.round(T.rate * 100) + "%"), el("td", "n", fmtPct(kkRate(t) * 100)));
       const vt = el("td", "v"), vb = el("button", "view", "見る"); vb.type = "button"; vb.setAttribute("aria-label", T.name + "の演出を見る（PTは増えません）");
       vb.onclick = () => { if (!busy) play(t, T.name + " の演出確認", true); };
       vt.append(vb); if (secret) tr.append(vt); rb.append(tr);
     }
+    if (secret) {
+      const tr = el("tr"), td = el("td"); td.colSpan = 5; td.style.textAlign = "right";
+      const kb = el("button", "view", "確変の演出を見る"); kb.type = "button";
+      kb.onclick = () => { if (!busy) { const t = draw(true); play(t, "確変 " + TIERS[t].name + " の演出確認", true, { kakuhen: true }); } };
+      td.append(kb); tr.append(td); rb.append(tr);
+    }
     if (view === "cal") renderCal();
+    if (view === "habit") renderHabit();
+    if (view === "set") renderSettings();
   }
 
-  // ---------- 並べ替え（番号をつまんで上下にスライド） ----------
-  function startDrag(e, g, li, ul) {
+  // ---------- 並べ替え（番号を長押ししてから上下にスライド） ----------
+  let dragging = false;
+  // ドラッグ中はページのスクロールを止める
+  document.addEventListener("touchmove", (e) => { if (dragging) e.preventDefault(); }, { passive: false });
+
+  function longPress(e, g, li, ul) {
     if (e.button !== undefined && e.button !== 0) return;
-    e.preventDefault();
-    const handle = e.currentTarget; try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    const handle = e.currentTarget, x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+    handle.classList.add("pressing");
+    let timer = setTimeout(() => { timer = 0; cleanup(); startDrag(handle, id, g, li, ul); }, 450);
+    const move = (ev) => { if (ev.pointerId === id && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancel(); };
+    const cancel = () => { if (timer) clearTimeout(timer); timer = 0; cleanup(); };
+    function cleanup() {
+      handle.classList.remove("pressing");
+      removeEventListener("pointermove", move); removeEventListener("pointerup", cancel); removeEventListener("pointercancel", cancel);
+    }
+    addEventListener("pointermove", move); addEventListener("pointerup", cancel); addEventListener("pointercancel", cancel);
+  }
+
+  function startDrag(handle, pointerId, g, li, ul) {
+    dragging = true;
+    try { handle.setPointerCapture(pointerId); } catch (_) {}
+    try { navigator.vibrate?.(15); } catch (_) {}
     li.classList.add("dragging"); document.body.classList.add("is-dragging");
     const renumber = () => [...ul.children].forEach((n, i) => { n.querySelector(".num").textContent = i + 1; });
     // つかんでいる行は動かさず、隣の行を入れ替える（行を動かすとポインタが外れるため）
     const move = (ev) => {
+      if (ev.pointerId !== pointerId) return;
       const y = ev.clientY;
       const prev = li.previousElementSibling, next = li.nextElementSibling;
       if (prev) { const r = prev.getBoundingClientRect(); if (y < r.top + r.height / 2) { ul.insertBefore(prev, li.nextSibling); renumber(); return; } }
       if (next) { const r = next.getBoundingClientRect(); if (y > r.top + r.height / 2) { ul.insertBefore(next, li); renumber(); } }
     };
-    const end = () => {
-      handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", end); handle.removeEventListener("pointercancel", end);
+    const end = (ev) => {
+      if (ev.pointerId !== pointerId) return;
+      dragging = false;
+      removeEventListener("pointermove", move); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
       li.classList.remove("dragging"); document.body.classList.remove("is-dragging");
       const order = [...ul.children].map((n) => n.dataset.id);
       const before = g.tasks.map((t) => t.id).join();
@@ -493,21 +609,22 @@ table.rate th.n { text-align: right }
       if (g.tasks.map((t) => t.id).join() !== before) save();
       render();
     };
-    handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", end); handle.addEventListener("pointercancel", end);
+    addEventListener("pointermove", move); addEventListener("pointerup", end); addEventListener("pointercancel", end);
   }
 
   // ---------- 画面切り替え ----------
   let view = "home";
+  const VIEWS = { home: ["viewHome", "tabHome"], cal: ["viewCal", "tabCal"], habit: ["viewHabit", "tabHabit"], set: ["viewSet", "tabSet"] };
   function setView(v) {
     view = v;
-    $("viewHome").hidden = v !== "home"; $("viewCal").hidden = v !== "cal";
-    $("tabHome").toggleAttribute("aria-current", v === "home"); if (v === "home") $("tabHome").setAttribute("aria-current", "page");
-    $("tabCal").toggleAttribute("aria-current", v === "cal"); if (v === "cal") $("tabCal").setAttribute("aria-current", "page");
-    if (v === "cal") renderCal();
+    for (const [k, [vid, tid]] of Object.entries(VIEWS)) {
+      $(vid).hidden = k !== v;
+      if (k === v) $(tid).setAttribute("aria-current", "page"); else $(tid).removeAttribute("aria-current");
+    }
+    render();
     scrollTo(0, 0);
   }
-  $("tabHome").onclick = () => setView("home");
-  $("tabCal").onclick = () => setView("cal");
+  for (const k of Object.keys(VIEWS)) $(VIEWS[k][1]).onclick = () => setView(k);
 
   // ---------- カレンダー ----------
   const pad = (n) => String(n).padStart(2, "0");
@@ -517,7 +634,8 @@ table.rate th.n { text-align: right }
   let calY = now0.getFullYear(), calM = now0.getMonth(), selKey = dayKey(now0);
   const openDetails = new Set();
 
-  // 完了したサブタスクを日ごとにまとめる
+  const HABIT_GROUP = { id: "habit", title: "習慣" };
+  // 完了したサブタスク（と習慣のガチャ）を日ごとにまとめる
   function byDay() {
     const map = {};
     for (const g of state.goals) for (const t of g.tasks) {
@@ -525,6 +643,12 @@ table.rate th.n { text-align: right }
       const k = dayKey(new Date(t.doneAt));
       (map[k] = map[k] || { pt: 0, items: [] });
       map[k].pt += t.pt || 0; map[k].items.push({ g, t });
+    }
+    for (const [k, h] of Object.entries(state.habit.log)) {
+      if (!h.tier) continue;
+      (map[k] = map[k] || { pt: 0, items: [] });
+      map[k].pt += h.pt || 0;
+      map[k].items.push({ g: HABIT_GROUP, t: { title: "始めた!" + (h.kakuhen ? "（確変）" : ""), doneAt: h.at, tier: h.tier, pt: h.pt } });
     }
     return map;
   }
@@ -555,7 +679,7 @@ table.rate th.n { text-align: right }
     const info = map[selKey];
     $("daySum").textContent = info ? "+" + info.pt.toLocaleString() + "PT" : "";
     const list = $("dayList"); list.textContent = "";
-    if (!info) { list.append(el("div", "empty", "この日に達成したサブタスクはありません")); return; }
+    if (!info) { list.append(el("div", "empty", "この日に獲得したPTはありません")); return; }
     const groups = new Map();
     for (const it of info.items) { if (!groups.has(it.g)) groups.set(it.g, []); groups.get(it.g).push(it.t); }
     for (const [g, subs] of groups) {
@@ -576,6 +700,184 @@ table.rate th.n { text-align: right }
   }
   $("calPrev").onclick = () => { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(); };
   $("calNext").onclick = () => { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(); };
+
+  // ---------- 習慣 ----------
+  const WINDOW = 60; // 秒。この時間内に押せばガチャ
+  // 今日の設定時刻（未設定なら null）
+  function targetToday(now = new Date()) {
+    const t = state.habit.time; if (!t) return null;
+    const [h, m] = t.split(":").map(Number);
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+  }
+  const fmtDelay = (sec) => {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 3600) return "+" + Math.floor(sec / 60) + ":" + pad(sec % 60);
+    return "+" + Math.floor(sec / 3600) + "時間" + Math.floor((sec % 3600) / 60) + "分";
+  };
+  const fmtLeft = (sec) => { sec = Math.max(0, Math.ceil(sec)); const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60); return (h ? h + ":" + pad(m) : m) + ":" + pad(sec % 60); };
+
+  // 1分以内に押せた日が今日（または昨日）から何日続いているか
+  function streak() {
+    const log = state.habit.log, d = new Date();
+    const today = log[dayKey(d)];
+    if (today && !today.ok) return 0;
+    if (!today) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (log[dayKey(d)]?.ok) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function renderHabit() {
+    $("streakNum").textContent = streak();
+    updateHabitButton();
+    drawChart();
+  }
+
+  function updateHabitButton() {
+    const btn = $("startBtn"), st = $("hStatus"), now = new Date();
+    const rec = state.habit.log[dayKey(now)], T = targetToday(now);
+    st.textContent = "";
+    if (rec) {
+      btn.disabled = true;
+      st.append("今日は記録済み：");
+      st.append(el("span", rec.ok ? "ok" : "ng", fmtDelay(rec.delay)));
+      st.append(rec.ok ? "（1分以内）" : "（1分を超えたのでガチャなし）");
+      return;
+    }
+    if (!T) {
+      btn.disabled = true;
+      st.append("まだ開始時間が決まっていません。");
+      const a = el("button", "linkbtn", "設定で時間を決める"); a.type = "button"; a.onclick = () => setView("set"); st.append(a);
+      return;
+    }
+    const diff = (now - T) / 1000;
+    if (diff < 0) { btn.disabled = true; st.append("押せるようになるまで "); st.append(el("b", null, fmtLeft(-diff))); return; }
+    btn.disabled = false;
+    if (diff <= WINDOW) { st.append("今押せばガチャ！ 残り "); st.append(el("span", "ok", fmtLeft(WINDOW - diff))); }
+    else { st.append("1分を過ぎています。押すと記録だけ残ります（"); st.append(el("span", "ng", fmtDelay(diff))); st.append("）"); }
+  }
+
+  $("startBtn").onclick = async () => {
+    const now = new Date(), T = targetToday(now), key = dayKey(now);
+    if (busy || !T || state.habit.log[key] || now < T) return;
+    const delay = Math.round((now - T) / 1000), ok = delay <= WINDOW;
+    const rec = { at: now.getTime(), delay, ok };
+    state.habit.log[key] = rec;
+    if (!ok) { save(); render(); return; }
+    // 4回に1回（確率1/4）で確変
+    const kakuhen = Math.random() < 0.25, tier = draw(kakuhen), pt = TIERS[tier].pt;
+    Object.assign(rec, { tier, pt, kakuhen });
+    state.points += pt;
+    state.stats[tier] = (state.stats[tier] || 0) + 1;
+    state.history.unshift({ tier, pt, task: "習慣：始めた!", at: now.getTime() });
+    state.history = state.history.slice(0, 100);
+    save(); render();
+    await play(tier, "習慣：始めた!", false, { kakuhen, raw: true });
+    countUp(state.points);
+  };
+
+  // 折れ線グラフ：上の横線が設定時間、そこから下に向かって「押すまでにかかった時間」
+  let range = 7;
+  document.querySelectorAll(".seg button").forEach((b) => b.onclick = () => {
+    range = Number(b.dataset.range);
+    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    drawChart();
+  });
+  const NS = "http://www.w3.org/2000/svg";
+  const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const STEPS = [2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440]; // 分
+  let chartPts = [];
+
+  function drawChart() {
+    const svg = $("chart"), W = svg.clientWidth || 340, H = 220;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.textContent = "";
+    const L = 14, R = 44, Tp = 10, B = 22, pw = W - L - R, ph = H - Tp - B;
+    const days = [], end = new Date(); end.setHours(0, 0, 0, 0);
+    for (let i = range - 1; i >= 0; i--) { const d = new Date(end); d.setDate(d.getDate() - i); days.push(d); }
+    const data = days.map((d) => ({ d, rec: state.habit.log[dayKey(d)] }));
+    const recs = data.filter((x) => x.rec);
+    const maxMin = Math.max(0, ...recs.map((x) => x.rec.delay / 60));
+    const top = STEPS.find((s) => s >= maxMin * 1.05) || Math.ceil(maxMin / 60) * 60;
+    const xAt = (i) => L + (range === 1 ? pw / 2 : (i / (range - 1)) * pw);
+    const yAt = (min) => Tp + (Math.min(min, top) / top) * ph;
+
+    // 目盛り（下に行くほど遅い）
+    const ticks = [0, top / 2, top];
+    if (top > 1 && !ticks.includes(1)) ticks.splice(1, 0, 1);
+    for (const tk of ticks) {
+      const y = yAt(tk);
+      svg.append(svgEl("line", { x1: L, x2: L + pw, y1: y, y2: y, stroke: tk === 0 ? "var(--fg)" : "var(--line)", "stroke-width": tk === 0 ? 1.5 : 1, "stroke-dasharray": tk === 1 ? "4 3" : "" }));
+      const label = tk === 0 ? "" : tk >= 60 ? "+" + (tk / 60) + "時間" : "+" + (Math.round(tk * 10) / 10) + "分";
+      if (label) { const t = svgEl("text", { x: L + pw + 6, y: y + 3.5 }); t.textContent = label; svg.append(t); }
+    }
+    // 日付ラベル
+    const every = range === 7 ? 1 : range === 30 ? 7 : 0;
+    data.forEach((x, i) => {
+      const d = x.d; let show = false, txt = "";
+      if (every === 1) { show = true; txt = (d.getMonth() + 1) + "/" + d.getDate(); }
+      else if (every === 7) { show = (range - 1 - i) % 7 === 0; txt = (d.getMonth() + 1) + "/" + d.getDate(); }
+      else { show = d.getDate() === 1 && d.getMonth() % 2 === 0 && i > 6; txt = (d.getMonth() + 1) + "月"; }
+      if (show) {
+        const x = xAt(i), anchor = x < L + 14 ? "start" : x > L + pw - 14 ? "end" : "middle";
+        const t = svgEl("text", { x: anchor === "start" ? L - 6 : x, y: H - 6, "text-anchor": anchor }); t.textContent = txt; svg.append(t);
+      }
+    });
+    // 線：記録のある日どうしをつなぐ（抜けた日は線を切る）。線の色は行き先の点の色
+    const color = (rec) => rec.ok ? "var(--good)" : "var(--bad)";
+    for (let i = 1; i < data.length; i++) {
+      const a = data[i - 1], b = data[i];
+      if (!a.rec || !b.rec) continue;
+      svg.append(svgEl("line", { x1: xAt(i - 1), y1: yAt(a.rec.delay / 60), x2: xAt(i), y2: yAt(b.rec.delay / 60), stroke: color(b.rec), "stroke-width": range === 365 ? 1.2 : 2, "stroke-linecap": "round" }));
+    }
+    chartPts = [];
+    const r = range === 365 ? 2.5 : 4.5;
+    data.forEach((x, i) => {
+      if (!x.rec) return;
+      const cx = xAt(i), cy = yAt(x.rec.delay / 60);
+      svg.append(svgEl("circle", { cx, cy, r, fill: color(x.rec), stroke: "var(--surface)", "stroke-width": 1.5 }));
+      chartPts.push({ cx, cy, x });
+    });
+    $("chartEmpty").hidden = recs.length > 0;
+    const okN = recs.filter((x) => x.rec.ok).length;
+    $("chartSum").textContent = "";
+    if (recs.length) {
+      $("chartSum").append("1分以内 "); $("chartSum").append(el("b", null, okN + " / " + recs.length + "日"));
+      const avg = recs.reduce((a, x) => a + x.rec.delay, 0) / recs.length;
+      $("chartSum").append("　平均 "); $("chartSum").append(el("b", null, fmtDelay(avg)));
+    }
+  }
+  // 点に触れると日付とかかった時間を出す
+  function showTip(ev) {
+    const svg = $("chart"), box = svg.getBoundingClientRect(), card = svg.parentElement.getBoundingClientRect();
+    if (!chartPts.length) return;
+    const vx = (ev.clientX - box.left) * (svg.viewBox.baseVal.width / box.width);
+    let best = chartPts[0]; for (const p of chartPts) if (Math.abs(p.cx - vx) < Math.abs(best.cx - vx)) best = p;
+    const sx = box.width / svg.viewBox.baseVal.width;
+    const tip = $("tip"); const d = best.x.d;
+    tip.textContent = (d.getMonth() + 1) + "/" + d.getDate() + "  " + fmtDelay(best.x.rec.delay) + (best.x.rec.ok ? "" : "（1分超え）");
+    tip.style.left = (box.left - card.left + best.cx * sx) + "px"; tip.style.top = (box.top - card.top + best.cy * sx) + "px";
+    tip.hidden = false;
+  }
+  $("chart").addEventListener("pointermove", showTip);
+  $("chart").addEventListener("pointerdown", showTip);
+  $("chart").addEventListener("pointerleave", () => { $("tip").hidden = true; });
+  addEventListener("resize", () => { if (view === "habit") drawChart(); });
+
+  // ---------- 設定 ----------
+  function renderSettings() {
+    const ti = $("setTime"); if (document.activeElement !== ti) ti.value = state.habit.time || "";
+    $("setSnd").textContent = state.sound ? "ON" : "OFF"; $("setSnd").setAttribute("aria-pressed", String(!!state.sound));
+  }
+  $("setTime").addEventListener("change", (e) => { state.habit.time = e.target.value; save(); render(); });
+  $("setSnd").onclick = () => { state.sound = !state.sound; save(); render(); };
+
+  // 1秒ごと：習慣ボタンの残り時間を更新。日付が変わったら全体を描き直す
+  let lastDay = dayKey(new Date());
+  setInterval(() => {
+    const k = dayKey(new Date());
+    if (k !== lastDay) { lastDay = k; render(); return; }
+    if (view === "habit") updateHabitButton();
+  }, 1000);
 
   function countUp(to) {
     const from = shownPt, start = performance.now(), dur = Math.min(1600, 300 + Math.abs(to - from) * 4);
@@ -826,15 +1128,31 @@ table.rate th.n { text-align: right }
     return showResult("PREMIUM", { preview });
   }
 
-  async function play(tier, taskName, preview = false) {
+  // 確変の入り：ぱちゅんと暗転 → 赤い放射の舞台で復活
+  async function kakuhenIntro() {
+    tv.style.visibility = "hidden"; stage.classList.add("blackout");
+    await sleep(700);
+    SFX.beat(); await sleep(450); SFX.beat(); await sleep(450);
+    stage.classList.remove("blackout"); stage.classList.add("kakuhen");
+    tv.style.visibility = ""; retrigger(tv, "on");
+    SFX.boom(); doFlash("#ff2a3d", 600, 3); shake(true);
+    speedLines({ colors: ["#ffffff", "#ff4a5a", "#ffd0d0"], n: 140, inner: 0.34 });
+    setCaption("確変", "#ff4a5a");
+    burst(90, ["#ff2a3d", "#ffffff", "#ffd43b"]);
+    await sleep(1500);
+    stage.classList.remove("shake-hard"); speedLines(null); setCaption("");
+    await sleep(300);
+  }
+
+  async function play(tier, taskName, preview = false, opts = {}) {
     busy = true; parts = []; clearInterval(rainIv);
     sizeCanvas(); sizeLines(); speedLines(null); stage.hidden = false; stage.className = "";
     tv.className = ""; tv.style.visibility = "";
     $("result").hidden = true;
-    $("taskLabel").textContent = preview ? taskName : "完了：" + taskName;
+    $("taskLabel").textContent = (opts.kakuhen ? "【確変】" : "") + (preview || opts.raw ? taskName : "完了：" + taskName);
     setCaption(""); curLv = 0; orbbox.className = "orbbox lv0"; kanji.textContent = LV[0].kanji;
 
-    try { await sequence(tier, preview); } catch (e) { console.error(e); } // 結果画面を閉じるまで待つ
+    try { if (opts.kakuhen) { await kakuhenIntro(); kanji.textContent = "確"; } await sequence(tier, preview); } catch (e) { console.error(e); } // 結果画面を閉じるまで待つ
     clearInterval(rainIv); speedLines(null); stage.hidden = true; stage.className = ""; parts = [];
     busy = false;
   }
